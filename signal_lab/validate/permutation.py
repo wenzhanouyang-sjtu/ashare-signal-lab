@@ -37,9 +37,16 @@ block_size > 1 时平移量取块的整数倍，进一步削弱残余结构。
 
 平移的分辨率限制
 ----------------
-可用的不同平移量只有 n_days / block_size 个（约 120 个）。
+可用的不同平移量只有 n_days / block_size 个（本项目约 121 个）。
 因此 p 值的最小分辨率约为 1/(n_blocks+1) ≈ 0.008，
 低于此值的 p 值无法区分。对本项目（预期 p 值偏大）不构成限制。
+
+**无放回，不是有放回抽样。** 早期实现固定抽 n_permutations=1000 次，
+但可选位移只有 121 个，于是同一个零假设样本被反复计入 ——
+报出去的"1000 次置换"实际有效样本只有 121 个，是在虚报自由度。
+现在改为**遍历全部不重复位移**（n_permutations 超过可用位移数时，
+按等间距取子集，仍是确定性的无放回抽样）。
+这既更正确，也更快：121 次引擎调用代替 1000 次。
 """
 
 from __future__ import annotations
@@ -79,7 +86,6 @@ def permutation_test(
     *,
     n_permutations: int = 1000,
     block_size: int = 20,
-    seed: int = 20240914,
     alternative: str = "greater",
 ) -> dict:
     """循环平移置换检验（引擎口径，精确）。
@@ -93,7 +99,8 @@ def permutation_test(
     cfg
         全局配置。
     n_permutations
-        置换次数。
+        置换次数**上限**。可用位移数（n_days / block_size）少于它时全部遍历；
+        多于它时按等间距无放回取子集 —— 任何情况下都不重复使用同一个平移量。
     block_size
         循环平移的块长，单位交易日。1 表示逐日平移。
     alternative
@@ -107,13 +114,16 @@ def permutation_test(
         sharpe_null_mean  零分布均值
         sharpe_null_std   零分布标准差
         p_value           置换 p 值
-        n_permutations    实际有效置换次数
-        n_distinct_shifts 可用的不同平移量个数（决定 p 值分辨率）
+        n_permutations    实际执行的置换次数（= 实际用到的不同位移数）
+        n_distinct_shifts 位移池大小，决定 p 值分辨率下限 1/(n+1)
         null_distribution 零分布夏普数组（供画图）
 
     统计量用 **毛收益**：置换检验问的是"信号有没有预测力"，
     成本是确定性的摩擦项，把它放进统计量只会稀释信号本身的检验。
     净夏普另行报告。
+
+    本函数**不需要随机种子**：位移是穷举的，没有随机抽样环节，
+    因此结果完全确定、可复现，重跑给出逐位相同的 p 值。
     """
     n_days = len(panels["close"])
     block = max(int(block_size), 1)
@@ -123,13 +133,18 @@ def permutation_test(
     sharpe_obs = _sharpe(base.gross_returns.to_numpy(dtype=float))
     sharpe_obs_net = _sharpe(base.returns.to_numpy(dtype=float))
 
-    rng = np.random.default_rng(seed)
-    null = np.full(n_permutations, np.nan, dtype=float)
+    # 全部不重复位移。k 从 1 起：k=0 即不平移，那是观测值本身，不属于零分布。
+    shift_pool = sorted({k * block % n_days for k in range(1, n_blocks + 1)} - {0})
+    if len(shift_pool) > n_permutations:
+        # 可用位移多于上限时等间距取子集：确定性、无放回，且覆盖整个位移空间。
+        idx = np.linspace(0, len(shift_pool) - 1, n_permutations).round().astype(int)
+        shifts = [shift_pool[i] for i in sorted(set(idx.tolist()))]
+    else:
+        shifts = shift_pool
+
+    null = np.full(len(shifts), np.nan, dtype=float)
     n_valid = 0
-    for i in range(n_permutations):
-        shift = int(rng.integers(1, n_blocks + 1)) * block % n_days
-        if shift == 0:
-            continue
+    for shift in shifts:
         try:
             res = run_backtest(weights, _roll_panels(panels, shift), cfg)
         except Exception:  # noqa: BLE001 — 个别平移可能造成退化面板，跳过即可
@@ -148,7 +163,7 @@ def permutation_test(
             "sharpe_null_std": np.nan,
             "p_value": np.nan,
             "n_permutations": 0,
-            "n_distinct_shifts": n_blocks,
+            "n_distinct_shifts": len(shift_pool),
             "null_distribution": null,
         }
 
@@ -165,6 +180,6 @@ def permutation_test(
         "sharpe_null_std": float(null.std(ddof=1)) if n_valid > 1 else np.nan,
         "p_value": float(p),
         "n_permutations": n_valid,
-        "n_distinct_shifts": n_blocks,
+        "n_distinct_shifts": len(shift_pool),
         "null_distribution": null,
     }

@@ -67,19 +67,20 @@ def main() -> int:
     n_perm = args.permutations or int(cfg.validation.permutation.n_permutations)
     block = int(cfg.validation.permutation.block_size)
     alpha = float(cfg.validation.multiple_testing.alpha)
-    seed = int(cfg.project.seed)
 
     specs = enumerate_specs(cfg)
     n_trials = len(specs)
 
     print(f"数据: {close.shape[1]} 只 × {close.shape[0]} 个交易日")
     print(f"试验次数 N = {n_trials}（多重检验校正的输入）")
-    print(f"置换检验: {n_perm} 次，块长 {block}\n")
+    print(f"置换检验: 位移池 {close.shape[0] // block} 个，上限 {n_perm} 次，块长 {block}\n")
 
 
     rows: list[dict] = []
     net_returns: dict[str, pd.Series] = {}
     nulls: dict[str, np.ndarray] = {}
+    n_perm_actual = 0          # 实际执行的置换次数（位移穷举，可能少于上限）
+    n_shifts_pool = 0          # 位移池大小，决定 p 值分辨率下限
 
     for i, spec in enumerate(specs, 1):
         t0 = time.time()
@@ -104,7 +105,7 @@ def main() -> int:
         if not args.skip_permutation:
             pt = permutation_test(
                 run.target_weights, panels, cfg,
-                n_permutations=n_perm, block_size=block, seed=seed,
+                n_permutations=n_perm, block_size=block,
             )
             rec.update(
                 {
@@ -116,6 +117,8 @@ def main() -> int:
                 }
             )
             nulls[spec.name] = pt["null_distribution"]
+            n_perm_actual = max(n_perm_actual, int(pt["n_permutations"]))
+            n_shifts_pool = max(n_shifts_pool, int(pt["n_distinct_shifts"]))
 
         rows.append(rec)
 
@@ -183,7 +186,10 @@ def main() -> int:
     summary = {
         "n_trials": n_trials,
         "n_signals_backtested": int(len(table)),
-        "n_permutations": 0 if args.skip_permutation else n_perm,
+        "n_permutations": 0 if args.skip_permutation else n_perm_actual,
+        "n_permutations_requested": 0 if args.skip_permutation else n_perm,
+        "n_distinct_shifts": n_shifts_pool,
+        "p_value_resolution": (1.0 / (n_shifts_pool + 1)) if n_shifts_pool else None,
         "alpha": alpha,
         "n_net_sharpe_positive": int((table["sharpe_net"] > 0).sum()),
         "n_gross_sharpe_positive": int((table["sharpe_gross"] > 0).sum()),

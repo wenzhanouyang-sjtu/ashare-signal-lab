@@ -4,10 +4,23 @@
 ------
 1. 在每个调仓日，用滚动窗口估计 **全部两两配对** 的对数价格回归系数 beta
    与相关系数。这一步用矩阵运算一次算完，避免对 4.5 万对逐一循环。
-2. 用相关系数做 **预筛选** —— 只保留走势高度同步的配对。这既是效率考量，
-   也是方法论要求：协整的前提是两个标的受共同的因子驱动。
+2. 用 **滚动相关系数** 做预筛选 —— 只保留走势高度同步的配对。这既是效率考量，
+   也是经济直觉：只有受共同因子驱动的标的，价差才可能均值回复。
 3. 对候选配对计算价差的 z 分数，取错价最极端的 top_k 个建仓：
    价差偏高 → 做空价差（空 y、多 x）；价差偏低 → 反之。
+
+本模块 **没有** 做什么（重要）
+------------------------------
+本模块一度被称作"协整配对"，但 **实现里没有任何协整检验**：
+没有 ADF、没有 Engle-Granger、没有半衰期约束；`min_corr` 筛的是
+**相关系数**，不是协整关系。
+
+两者不是一回事：两个各自随机游走的序列可以高度相关，而价差永不回复。
+**"高相关价差的均值回复"才是这个模块的真实描述**，README 与结果表已按此改名。
+
+真正的协整筛选（训练窗内 ADF + 半衰期约束 + 仅用训练窗选对、测试窗交易）
+未实现，列入已知局限。此处曾经有一个 `estimate_halflife()` 函数，
+从未被任何代码调用，已删除 —— 留着它只会让人以为协整检验做过了。
 
 进场 / 出场缓冲带
 ------------------
@@ -21,9 +34,9 @@
 
 关于"样本内筛选 vs 样本外表现"
 ------------------------------
-规划阶段的快速探测显示：用样本内协整检验挑出的配对，其样本外表现
-并不优于随机挑选（z 值为负）。本框架的作用正是把这件事放到完整的
-样本外 + 多重检验框架下重新检验，而不是假设它成立。
+规划阶段（本模块尚未写出时）的快速探测显示：用样本内协整检验挑出的配对，
+其样本外表现并不优于随机挑选（z 值为负）。本框架的作用正是把这件事放到
+完整的样本外 + 多重检验框架下重新检验，而不是假设它成立。
 
 分数定义
 --------
@@ -38,29 +51,6 @@ import numpy as np
 import pandas as pd
 
 from signal_lab.signals.base import register
-
-
-def estimate_halflife(spread: np.ndarray) -> float:
-    """用 AR(1) 估计均值回复半衰期（OU 过程）。
-
-    拟合 Δs_t = a + b·s_{t−1}，则半衰期 = −ln2 / ln(1+b)。
-    b ≥ 0（无回复）或 b ≤ −1（振荡）时返回 inf / nan。
-    """
-    s = np.asarray(spread, dtype=float)
-    s = s[np.isfinite(s)]
-    if len(s) < 20:
-        return float("nan")
-    ds = np.diff(s)
-    lag = s[:-1]
-    X = np.column_stack([np.ones(len(lag)), lag])
-    try:
-        coef, *_ = np.linalg.lstsq(X, ds, rcond=None)
-    except np.linalg.LinAlgError:
-        return float("nan")
-    b = coef[1]
-    if b >= 0 or b <= -1:
-        return float("inf") if b >= 0 else float("nan")
-    return float(-np.log(2.0) / np.log(1.0 + b))
 
 
 def _pair_z(
@@ -200,5 +190,5 @@ def register_all() -> None:
         "pairs",
         pairs_weights,
         weight_builder="direct",
-        description="统计套利：在协整配对中交易价差的极端偏离",
+        description="统计套利：在高相关配对的价差极端偏离处建仓（非协整检验）",
     )

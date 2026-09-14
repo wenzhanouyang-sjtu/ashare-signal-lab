@@ -1,7 +1,10 @@
 {
   "n_trials": 20,
   "n_signals_backtested": 20,
-  "n_permutations": 1000,
+  "n_permutations": 121,
+  "n_permutations_requested": 1000,
+  "n_distinct_shifts": 121,
+  "p_value_resolution": 0.00819672131147541,
   "alpha": 0.05,
   "n_net_sharpe_positive": 8,
   "n_gross_sharpe_positive": 10,

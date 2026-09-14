@@ -242,6 +242,19 @@ def main() -> int:
         lines.append(f"- Benjamini-Hochberg FDR 校正后显著：{int(validation['significant_bh'].sum())} / {n}")
         lines.append(f"- Bonferroni 校正后显著：{int(validation['significant_bonferroni'].sum())} / {n}")
         lines.append(f"- Deflated Sharpe > 0.95：{int((validation['dsr'] > 0.95).sum())} / {n}")
+
+        # 置换检验的有效自由度：位移池大小决定 p 值分辨率下限。
+        # 不写出这一行，读者会以为 p 值可以取到任意小。
+        meta_path = results_dir / "validation_summary.json"
+        if meta_path.exists():
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            if meta.get("n_distinct_shifts"):
+                lines.append(
+                    f"- 置换位移池：**{meta['n_distinct_shifts']}** 个不重复位移，"
+                    f"p 值最小分辨率 {meta['p_value_resolution']:.4f}"
+                    f"（穷举无放回，非「抽 1000 次」）"
+                )
+
         best = validation.sort_values("sharpe_net", ascending=False).iloc[0]
         lines.append(
             f"\n最优信号 **{best['name']}**：净夏普 {best['sharpe_net']:+.3f}，"

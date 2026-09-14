@@ -94,7 +94,7 @@ def test_permutation_detects_lookahead():
     future = close.pct_change(3).shift(-3)          # 偷看未来 3 日
     w = _weekly_weights(close, future)
 
-    pt = permutation_test(w, panels, _cfg(), n_permutations=30, block_size=10, seed=3)
+    pt = permutation_test(w, panels, _cfg(), n_permutations=30, block_size=10)
     assert pt["sharpe_obs"] > 1.0, "偷看未来的信号毛夏普应当很高"
     assert pt["p_value"] < 0.1, f"偷看未来未被判显著，p={pt['p_value']}"
     assert abs(pt["sharpe_null_mean"]) < 1.0, "零分布应当集中在 0 附近"
@@ -109,7 +109,7 @@ def test_permutation_null_centered_for_random_signal():
     )
     w = _weekly_weights(close, noise)
 
-    pt = permutation_test(w, panels, _cfg(), n_permutations=30, block_size=10, seed=7)
+    pt = permutation_test(w, panels, _cfg(), n_permutations=30, block_size=10)
     assert np.isfinite(pt["p_value"])
     assert pt["p_value"] > 0.05, f"随机信号被判显著，p={pt['p_value']}"
 
@@ -128,7 +128,7 @@ def test_permutation_uses_realized_weights():
     )
     w = _weekly_weights(close, scores)
 
-    pt = permutation_test(w, panels, _cfg(), n_permutations=10, block_size=10, seed=1)
+    pt = permutation_test(w, panels, _cfg(), n_permutations=10, block_size=10)
     engine = run_backtest(w, panels, _cfg())
 
     def _sr(x):
@@ -143,7 +143,7 @@ def test_permutation_handles_flat_strategy():
     """从不交易的策略不应崩溃，p 值应为 NaN 或未定义而非抛异常。"""
     panels, close = _panels()
     w = pd.DataFrame(np.nan, index=close.index, columns=close.columns)
-    pt = permutation_test(w, panels, _cfg(), n_permutations=5, block_size=10, seed=1)
+    pt = permutation_test(w, panels, _cfg(), n_permutations=5, block_size=10)
     assert "p_value" in pt
 
 
