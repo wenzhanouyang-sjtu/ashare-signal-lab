@@ -206,7 +206,21 @@ def build(cfg) -> Path:
     trad.to_sql("tradability", con, if_exists="append", index=False)
 
     # 成分股名单快照：必须记录获取日期，因为它是"当前"名单而非历史名单
-    uni_path = cache / "universe.parquet"
+    #
+    # ⚠ 文件名必须与 signal_lab/data/universe.py 的写入路径一致：
+    #   那边写的是 f"universe_{index_code}.parquet"（如 universe_000300.parquet）。
+    #   这里曾经写成 "universe.parquet"，于是 exists() 恒为 False，
+    #   universe_snapshot 表**静默地永远是 0 行** —— 不报错、不警告，
+    #   和本项目记录的其他几个坑同一个形状。
+    #   守卫：tests/test_data.py::test_universe_snapshot_is_populated
+    index_code = str(cfg.data.universe.index_code)
+    uni_path = cache / f"universe_{index_code}.parquet"
+    if not uni_path.exists():
+        raise FileNotFoundError(
+            f"找不到成分股缓存 {uni_path} —— 请先运行 scripts/01_fetch_data.py。"
+            f"（这里刻意抛异常而不是静默跳过：跳过会让 universe_snapshot 变成空表，"
+            f"而空表看起来和'没有数据'没有区别。）"
+        )
     if uni_path.exists():
         uni = pd.read_parquet(uni_path)
         uni = uni.rename(columns={"index_code": "index_code"})

@@ -6,7 +6,8 @@
    引擎内部通过 shift(signal_lag) 强制这一点，调用方无法绕过。
 2. **可交易性约束**：涨跌停封板、停牌时委托被拒绝 —— 不是"假设能成交
    再打个折扣"，而是直接不成交，并单独统计被拒绝的委托数。
-3. **T+1**：当日买入的股票当日不可卖出。
+3. **T+1**：当日买入的股票当日不可卖出。在本引擎"每日一次开盘净额调仓"
+   的框架下该约束永不 binding（不存在同日两向成交），详见循环内注释。
 4. **成本与收益分离**：维护两条账本，实际账本扣成本、毛账本不扣，
    两者执行完全相同的交易。于是 毛收益 − 净收益 精确等于成本，
    可以干净地回答"这个策略是被成本吃掉的，还是本来就没边际"。
@@ -152,12 +153,21 @@ def run_backtest(
                 delta = np.where(trade_w < min_w, 0.0, delta)
 
             # T+1：当日买入的股票当日不可卖出。
-            # 注：在"每日至多调仓一次、且只在开盘成交"的框架下，
-            # 开盘时不存在当日买入的股票，因此该约束通常不 binding；
-            # 保留它是为了让 signal_lag=0 或未来改为日内调仓时依然正确。
-            if t_plus_1:
-                sellable = shares.copy()
-                delta = np.where(delta < 0, -np.minimum(-delta, np.maximum(sellable, 0.0)), delta)
+            #
+            # 本引擎每日只在开盘执行 **一次净额调仓**：对任一股票，delta 非买
+            # 即卖，不存在同日先买后卖。于是"当日买入的股数"在执行前恒为零，
+            # 这条约束在本框架下 **数学上永不 binding** —— 这是框架的推论，
+            # 不是省略。cfg 里的 t_plus_1 因此只作为口径记录写入 result.meta。
+            #
+            # ⚠ 此处原先的实现是 `sellable = shares`，以当前持仓数封顶卖出量。
+            # 那不是 T+1，而是 **禁止卖空**：持空头时 shares ≤ 0，任何卖出都被
+            # 清零，配对交易的空腿永远建不起来 —— t_plus_1 一开一关会跑出两套
+            # 完全不同的结果，而配置里它默认是 true。已修正。
+            # 回归测试：tests/test_engine.py::test_t_plus_1_flag_does_not_block_shorts
+            #
+            # 若未来改为日内多批次调仓，必须在此处用真正的 bought_today 掩码
+            # 实现该约束，而不是恢复旧写法。
+            _ = t_plus_1
 
             traded_value = np.abs(delta) * np.where(valid, px_open, 0.0)
             active = traded_value > 1e-12

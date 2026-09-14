@@ -219,7 +219,7 @@ def main() -> int:
         )
 
     if sens:
-        lines.append("\n各信号族的盈亏平衡成本（净夏普归零时的单边固定成本）：\n")
+        lines.append("\n各信号族的盈亏平衡成本（净夏普归零时的往返固定成本，不含冲击成本）：\n")
         rows = []
         for nm, df in sens.items():
             s = df["sharpe"].to_numpy(dtype=float)
@@ -230,8 +230,16 @@ def main() -> int:
                 i = cross[0]
                 if s[i + 1] != s[i]:
                     be = x[i] + (x[i + 1] - x[i]) * (0.0 - s[i]) / (s[i + 1] - s[i])
+            # 没有盈亏平衡点有两种截然不同的原因，直接写出来。
+            # 裸的 nan 会被读成"算错了"，而这两件事恰恰是本项目最想说明的。
+            if not np.isnan(be):
+                note = ""
+            elif s[0] <= 0:
+                note = "零成本下已为负 —— 不存在盈亏平衡点"
+            else:
+                note = f"扫描范围内始终为正（上限 {x[-1]:.1f}bp）"
             rows.append({"signal": nm, "break_even_round_trip_bp": be,
-                         "sharpe_at_zero_cost": s[0]})
+                         "sharpe_at_zero_cost": s[0], "说明": note})
         lines.append(pd.DataFrame(rows).to_markdown(index=False, floatfmt=".2f"))
 
     if validation is not None and "p_value" in validation.columns:

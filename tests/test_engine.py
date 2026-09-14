@@ -148,3 +148,36 @@ def test_costs_reduce_net_returns(cfg):
 
     assert res.total_cost_abs > 0
     assert res.equity.iloc[-1] < res.gross_equity.iloc[-1]
+
+
+def test_t_plus_1_flag_does_not_block_shorts(cfg):
+    """回归测试：t_plus_1 不得阻止建立空头。
+
+    曾经的实现用 `sellable = shares` 封顶卖出量。持空头时 shares ≤ 0，
+    卖出量被清零，空腿永远建不起来 —— 于是 t_plus_1 这个 flag 实际控制的是
+    "能不能做空"，而它在 config.yaml 里默认 true，等于把配对交易偷偷变成了
+    单边多头。这个差异不会报错、不会警告，只会让夏普换个数字。
+
+    这里显式关闭与开启 t_plus_1，断言两套配置结果完全一致，且都能建空头。
+    """
+    import copy
+
+    dates = pd.bdate_range("2020-01-01", periods=20)
+    codes = ["A", "B"]
+    panels = make_panels(dates, codes, 10.0)
+
+    weights = pd.DataFrame(0.0, index=dates, columns=codes)
+    weights["A"] = -0.5          # 持续做空 A
+    weights["B"] = 0.5
+
+    cfg_off = copy.deepcopy(cfg)
+    cfg_off.backtest.execution.t_plus_1 = False
+    cfg_on = copy.deepcopy(cfg)
+    cfg_on.backtest.execution.t_plus_1 = True
+
+    res_off = run_backtest(weights, panels, cfg_off)
+    res_on = run_backtest(weights, panels, cfg_on)
+
+    assert res_on.weights["A"].min() < -0.1, "t_plus_1=True 时仍应能建立空头"
+    pd.testing.assert_series_equal(res_off.equity, res_on.equity)
+    assert res_on.meta["t_plus_1"] is True

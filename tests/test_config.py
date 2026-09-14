@@ -80,3 +80,32 @@ def test_path_resolves_against_project_root(cfg):
     p = cfg.path("data", "cache_dir")
     assert p.is_absolute()
     assert p.name == "data_cache"
+
+
+def test_no_dead_price_limit_keys(cfg):
+    """price_limits 里不得存在 board_of() 永远返回不了的键。
+
+    为什么要有这条测试：`ST: 0.05` 在配置里躺了很久，README 也照着它宣称
+    "ST ±5% 已实现"。但 board_of() 只按代码前缀返回 STAR / ChiNext / BSE /
+    default，**永远返回不了 "ST"** —— 于是那行配置从未被任何代码读到，
+    而 ST 股票的封板被按 ±10% 少判，结果偏乐观。
+
+    死配置比缺配置更危险：缺配置你知道要补，死配置让你以为已经补了。
+    这条测试把 price_limits 的键域与 board_of() 的值域锁在一起，
+    以后再加板块（或有人手滑写个新键）会立刻失败。
+    """
+    from signal_lab.data.symbols import board_of
+
+    # board_of 的值域：用各板块的代表性代码探出来
+    samples = ["600000", "000001", "300750", "301236", "688981", "830799", "430047"]
+    reachable = {board_of(c) for c in samples}
+    assert reachable == {"default", "ChiNext", "STAR", "BSE"}, (
+        f"board_of 值域变了: {reachable} —— 请同步更新本条测试与 config.yaml"
+    )
+
+    keys = set(cfg.backtest.price_limits.keys())
+    dead = keys - reachable - {"default"}
+    assert not dead, (
+        f"price_limits 里有 board_of() 永远返回不了的键: {sorted(dead)}。"
+        f"它们是从未被读到的死配置，会让人误以为该板块已建模。"
+    )

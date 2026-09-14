@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -176,3 +178,47 @@ def test_panels_keep_missing_distinct_from_zero(cfg):
     assert close.loc[close.index < cutoff, "600000"].isna().all(), \
         "上市前必须是 NaN，不能填 0"
     assert close.loc[close.index >= cutoff, "600000"].notna().all()
+
+
+def test_universe_cache_filename_matches_build_db_contract(cfg):
+    """成分股缓存文件名必须与 00_build_db.py 寻找的一致。
+
+    这里曾经不一致：universe.py 写 `f"universe_{index_code}.parquet"`，
+    而 00_build_db.py 找 `"universe.parquet"` —— 于是 exists() 恒为 False，
+    `universe_snapshot` 表**静默地永远是 0 行**。不报错、不警告，
+    和本项目记录的其他几个坑同一个形状：安静地什么都没做。
+
+    两层守卫：
+      1) 源码契约 —— 脚本里必须用带 index_code 的 f-string；
+      2) 行为 —— 若数据库已建好，universe_snapshot 不得为空表。
+    """
+    index_code = str(cfg.data.universe.index_code)
+    root = Path(__file__).resolve().parent.parent
+    src = (root / "scripts" / "00_build_db.py").read_text(encoding="utf-8")
+
+    # 只看真正的赋值语句，不看注释 —— 否则脚本里任何一句解释性注释
+    # 都能让这条断言通过（本测试第一版就是这么被骗过去的：注释里
+    # 写了正确的 f-string，而代码那行是错的，断言照样通过）。
+    assigns = [
+        ln.strip() for ln in src.splitlines()
+        if ln.strip().startswith("uni_path") and "=" in ln
+    ]
+    assert assigns, "00_build_db.py 里找不到 uni_path 赋值语句"
+    bad = [ln for ln in assigns if f'f"universe_{{index_code}}.parquet"' not in ln]
+    assert not bad, (
+        f"00_build_db.py 必须按 universe_<index_code>.parquet 查找成分股缓存，"
+        f"否则 universe_snapshot 会静默装载 0 行。实际写法: {bad}"
+    )
+
+    db = cfg.path("data", "cache_dir") / "ashare.db"
+    if not db.exists():
+        pytest.skip("尚未建库，跳过行为检查（先跑 scripts/00_build_db.py）")
+
+    import sqlite3
+    con = sqlite3.connect(db)
+    n = con.execute("select count(*) from universe_snapshot").fetchone()[0]
+    con.close()
+    assert n > 0, (
+        f"universe_snapshot 有 {n} 行 —— 空表说明成分股快照从未装载，"
+        f"而它存在的意义正是记录'这份名单是什么时候取的'"
+    )

@@ -56,11 +56,18 @@ backtest:
     min_trade_weight: 0.001
 
   # 涨跌停幅度（按板块）
+  #
+  # ⚠ 这里**不能**再写 ST: 0.05。board_of() 只按代码前缀返回
+  #   STAR / ChiNext / BSE / default，永远返回不了 "ST"，
+  #   所以任何 ST 条目都是死配置 —— 看起来实现了，实际从未被读到。
+  #   数据源也不含股票名称历史，无法补出 ST 状态（详见 README 已知局限 11）。
+  #   后果有方向：ST 股票的封板被少判 → 回测偏乐观。
+  #   tests/test_config.py::test_no_dead_price_limit_keys 盯着这件事。
   price_limits:
     default: 0.10           # 主板 ±10%
     STAR: 0.20              # 科创板 (688xxx) ±20%
     ChiNext: 0.20           # 创业板 (300xxx) ±20%
-    ST: 0.05                # ST 股 ±5%
+    BSE: 0.30               # 北交所 ±30%（board_of 会返回 BSE，此前未列，已补）
 
   rebalance: "W"            # 调仓频率：W=周频 / D=日频 / M=月频
                             # 侦查结论：日频调仓 + 15bp 单边成本 ≈ 年化 75% 成本，

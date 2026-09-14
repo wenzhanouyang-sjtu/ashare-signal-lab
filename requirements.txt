@@ -2,7 +2,9 @@
 pandas>=2.0
 numpy>=1.24
 scipy>=1.10
-statsmodels>=0.14      # 协整检验 (Engle-Granger / Johansen)、ADF
+statsmodels>=0.14      # 仅测试用：与 BH-FDR 实现逐一对拍（见 tests/test_validate.py）
+                       # 注：本项目的 pairs 族**不做协整检验**（无 ADF / Engle-Granger），
+                       # 早期注释曾误写为"协整检验"，与代码不符，已更正。
 matplotlib>=3.7
 pyarrow>=14.0          # parquet 缓存
 PyYAML>=6.0
