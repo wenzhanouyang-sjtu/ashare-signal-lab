@@ -1,0 +1,20 @@
+# 原始行情缓存：300 只 × 10 年的逐日数据（约 62 万行）。
+# 不入库 —— scripts/01_fetch_data.py 可完整重建（约 4 分钟，含退避重试）。
+data_cache/
+
+# results/ 下的产物 **刻意入库**：汇总表只有 20 行、逐日收益矩阵约 400KB，
+# 体积可接受，但能让审阅者不跑任何代码就看到结论、并直接复现图表。
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# 编辑器 / 系统
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ashare-signal-lab"
+version = "0.1.0"
+description = "A-share multi-signal research framework: point-in-time data, realistic trading frictions, and honest out-of-sample validation"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "statsmodels>=0.14",
+    "matplotlib>=3.7",
+    "pyarrow>=14.0",
+    "PyYAML>=6.0",
+    "akshare>=1.12",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "tqdm>=4.66"]
+
+[tool.setuptools.packages.find]
+include = ["signal_lab*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

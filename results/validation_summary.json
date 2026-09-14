@@ -1,0 +1,28 @@
+{
+  "n_trials": 20,
+  "n_signals_backtested": 20,
+  "n_permutations": 1000,
+  "alpha": 0.05,
+  "n_net_sharpe_positive": 8,
+  "n_gross_sharpe_positive": 10,
+  "best_signal": "pairs[min_corr=0.75,top_k=40]",
+  "best_sharpe_net": 0.6459185322304138,
+  "best_sharpe_gross": 0.6793907225893214,
+  "best_turnover": 10.135832721242872,
+  "best_total_cost": 0.06422896328246505,
+  "walkforward": {
+    "n_folds": 5,
+    "mean_best_train_sharpe": 0.7699696142751693,
+    "mean_best_test_sharpe": 1.1471804028456376,
+    "mean_test_sharpe_of_median": -0.14507342080011737,
+    "mean_rank_ic": 0.2541353383458646,
+    "n_folds_positive_rank_ic": 4,
+    "sharpe_decay": -0.3772107885704683
+  },
+  "n_significant_raw_p05": 1,
+  "n_significant_bh": 0,
+  "n_significant_bonferroni": 0,
+  "n_dsr_above_095": 0,
+  "best_dsr": 0.24042957466320686,
+  "best_sr0_annual": 0.8787791186084263
+}
